@@ -4,11 +4,11 @@ np.random.seed(42)
 
 # Returns the ReLU value of the input x
 def relu(x):
-    return max(0, x)
+    return np.maximum(0, x)
 
 # Returns the derivative of the ReLU value of the input x
 def relu_derivative(x):
-    return (x>0).astype(int)
+    return (np.array(x)>0).astype(int)
 
 ## TODO 1a: Return the sigmoid value of the input x
 def sigmoid(x):
@@ -16,13 +16,12 @@ def sigmoid(x):
 
 ## TODO 1b: Return the derivative of the sigmoid value of the input x
 def sigmoid_derivative(x):
-    return sigmoid(x)*(1-sigmoid(x));
+    s=sigmoid(x)
+    return s*(1-s)
 
 ## TODO 1c: Return the derivative of the tanh value of the input x
 def tanh(x):
-    first = np.exp(x)
-    second = np.exp(-x)
-    return (first-second)/(first+second)
+    return np.tanh(x)
 
 ## TODO 1d: Return the derivative of the tanh value of the input x
 def tanh_derivative(x):
@@ -46,9 +45,9 @@ def get_activation_functions(activations):
     return activation_funcs, activation_derivatives
 
 class NN:
-    linear =[]
-    nonlinear = []
     def __init__(self, input_dim, hidden_dims, activations=None):
+        self.linear =[]
+        self.nonlinear = []
         '''
         Parameters
         ----------
@@ -84,10 +83,10 @@ class NN:
         prev=input_dim
         for dims in hidden_dims:
             self.weights.append(np.random.randn(dims,prev))
-            self.biases.append(np.zeros((dims,1)))
+            self.biases.append(np.ones((dims,1)))
             prev=dims
         self.weights.append(np.random.randn(1,prev))
-        self.biases.append(np.random.rand(1,1))
+        self.biases.append(np.ones((1,1)))
 
     def forward(self, X):
         '''
@@ -104,15 +103,14 @@ class NN:
         ## TODO 3a: Compute activations for all the nodes with the corresponding
         ## activation function of each layer applied to the hidden nodes
         prev=np.transpose(X)
-        linearcur=[]
-        nonlinearcur=[]
+        self.linear=[]
+        self.nonlinear=[]
         for i in range(0,len(self.weights)):
             z=np.dot(self.weights[i],prev) + self.biases[i]
             prev=self.activations[i](z)
-            linearcur.append(z)
-            nonlinearcur.append(prev)
-        self.linear=linearcur
-        self.nonlinear=nonlinearcur
+            self.linear.append(z)
+            self.nonlinear.append(prev)
+
         ## TODO 3b: Calculate the output probabilities of shape (N, 1) where N is number of examples
         output_probs=np.transpose(prev)
         return output_probs
@@ -134,20 +132,19 @@ class NN:
         ## sigmoid-based binary cross-entropy loss
         ## Hint: When computing the derivative of the cross-entropy loss, don't forget to 
         ## divide the gradients by N (number of examples)  
-        n=len(self.nonlinear)
         y=y.T
-        ycap = self.nonlinear[n-1]
-        loss=-((y/ycap)+((1-y)/(1-ycap)))/X.shape[0]
+        ycap = self.nonlinear[-1]
+        loss=-((y/ycap)-((1-y)/(1-ycap)))/X.shape[0]
         grad_weights_local=[]
         grad_biases_local=[]
-        for i in range(n - 1, -1, -1):
-            grad_biases_local.append(np.sum(loss*self.activation_derivatives[i](self.linear[i]),axis=1, keepdims=True))
+        for i in reversed(range(len(self.weights))):
+            dz=loss*self.activation_derivatives[i](self.linear[i])
+            grad_biases_local.append(np.sum(dz,axis=1, keepdims=True))
             if i==0:
-                grad_weights_local.append(np.dot((loss*self.activation_derivatives[i](self.linear[i])),X))
+                grad_weights_local.append(np.dot(dz,X))
             else:
-                grad_weights_local.append(np.dot((loss*self.activation_derivatives[i](self.linear[i])),self.nonlinear[i-1].T))
-
-            loss=np.dot(self.weights[i].T,loss*(self.activation_derivatives[i](self.linear[i])))
+                grad_weights_local.append(np.dot(dz,self.nonlinear[i-1].T))
+            loss=np.dot(self.weights[i].T,dz)
 
         ## TODO 4b: Next, compute gradients for all weights and biases for all layers
         ## Hint: Start from the output layer and move backwards to the first hidden layer
