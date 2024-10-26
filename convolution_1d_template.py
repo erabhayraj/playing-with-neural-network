@@ -21,8 +21,25 @@ def Convolution_1D(
     Returns:
     np.array, output of the convolution
     """
-    
-    pass
+    output=[]
+    m=array1.shape[0]
+    n=array2.shape[0]
+    if padding == "valid":
+        output_len=m-n+1
+        output=np.zeros(output_len)
+        for i in range(output_len):
+            output[i]=np.sum(array1[i:i+n]*array2[::-1])
+    elif padding=="full":
+        cnt=n-1
+        new_m=2*cnt+m
+        updated_array1=np.zeros(new_m)
+        updated_array1[cnt:cnt+m]=array1
+        output_len=new_m-n+1
+        output=np.zeros(output_len)
+        for i in range(output_len):
+            output[i]=np.sum(updated_array1[i:i+n]*array2[::-1])
+
+    return output
 
 def probability_sum_of_faces(p_A: np.array, p_B:np.array) -> np.array:
     """
@@ -46,4 +63,19 @@ def probability_sum_of_faces(p_A: np.array, p_B:np.array) -> np.array:
 
     The output should start with the probability of 2, and hence the expected output is [0.25, 0.5, 0.25].
     """
-    pass
+    m = p_A.shape[0]
+    n = p_B.shape[0]
+    output_probs=np.zeros(m+n)
+    for i in range(1,m+1):
+        for j in range(1,n+1):
+            output_probs[i+j-1]+=p_A[i-1]*p_B[j-1]
+    return output_probs
+    
+
+if __name__ == "__main__":
+    array1=np.array([0.5, 0.5])
+    array2=np.array([0.5, 0.5])
+    output=Convolution_1D(array1=array1,array2=array2,padding="valid",stride=1)
+    print(output)
+    output=probability_sum_of_faces(array1,array2)
+    print(output)

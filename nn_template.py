@@ -48,6 +48,11 @@ class NN:
     def __init__(self, input_dim, hidden_dims, activations=None):
         self.linear =[]
         self.nonlinear = []
+        self.velocity_w=[]
+        self.velocity_b=[]
+        self.t=0
+        self.second_moment_w=[]
+        self.second_moment_b=[]
         '''
         Parameters
         ----------
@@ -82,11 +87,11 @@ class NN:
         self.biases = []
         prev=input_dim
         for dims in hidden_dims:
-            self.weights.append(np.random.randn(dims,prev))
-            self.biases.append(np.ones((dims,1)))
+            self.weights.append(np.random.normal(0,1,(dims,prev)))
+            self.biases.append(np.random.normal(0,1,(dims,1)))
             prev=dims
-        self.weights.append(np.random.randn(1,prev))
-        self.biases.append(np.ones((1,1)))
+        self.weights.append(np.random.normal(0,1,(1,prev)))
+        self.biases.append(np.random.normal(0,1,(1,1)))
 
     def forward(self, X):
         '''
@@ -112,7 +117,7 @@ class NN:
             self.nonlinear.append(prev)
 
         ## TODO 3b: Calculate the output probabilities of shape (N, 1) where N is number of examples
-        output_probs=np.transpose(prev)
+        output_probs=np.array(np.transpose(prev))
         return output_probs
 
     def backward(self, X, y):
@@ -150,8 +155,6 @@ class NN:
         ## Hint: Start from the output layer and move backwards to the first hidden layer
         self.grad_weights = grad_weights_local
         self.grad_biases = grad_biases_local
-
-
         return self.grad_weights, self.grad_biases
 
     def step_bgd(self, weights, biases, delta_weights, delta_biases, optimizer_params, epoch):
@@ -180,17 +183,36 @@ class NN:
         ## Use the hyperparameter learning_rate as the static learning rate
         updated_W,updated_B = [],[]
         n=len(self.weights)
-        for i in range(len(self.weights)):
-            updated_W.append(self.weights[i]-learning_rate*delta_weights[n-1-i])
-            updated_B.append(self.biases[i]-learning_rate*delta_biases[n-1-i])
+        if gd_flag == 1:
+            for i in range(len(weights)):
+                updated_W.append(weights[i]-learning_rate*delta_weights[n-1-i])
+                updated_B.append(biases[i]-learning_rate*delta_biases[n-1-i])
 
         ## TODO 5b: Variant 2(gd_flag = 2): Vanilla GD with Exponential Learning Rate Decay
         ## Use the hyperparameter learning_rate as the initial learning rate
         ## Use the parameter epoch for t
         ## Use the hyperparameter decay_constant as the decay constant
+        elif gd_flag == 2:
+            updated_learning_rate=learning_rate*(np.exp(-decay_constant*epoch))
+            for i in range(len(weights)):
+                updated_W.append(weights[i]-updated_learning_rate*delta_weights[n-1-i])
+                updated_B.append(biases[i]-updated_learning_rate*delta_biases[n-1-i])
+
 
         ## TODO 5c: Variant 3(gd_flag = 3): GD with Momentum
         ## Use the hyperparameters learning_rate and momentum
+        #vt = βvt−1 + (1 − β)∇w L(wt−1)
+        elif gd_flag == 3:
+            if epoch==0:
+                self.velocity_w = [np.zeros_like(w) for w in weights]
+                self.velocity_b = [np.zeros_like(b) for b in biases]
+            for i in range(n):
+                vt_w= momentum*self.velocity_w[i]+(1-momentum)*delta_weights[n-1-i]
+                vt_b= momentum*self.velocity_b[i]+(1-momentum)*delta_biases[n-1-i]
+                updated_W.append(weights[i]-learning_rate*vt_w)
+                updated_B.append(biases[i]-learning_rate*vt_b)
+                self.velocity_w[i]=vt_w
+                self.velocity_b[i]=vt_b
 
         
         return updated_W, updated_B
@@ -210,14 +232,37 @@ class NN:
                 eps: A small constant for numerical stability.
         '''
         learning_rate = optimizer_params['learning_rate']
-        beta = optimizer_params['beta']
-        gamma = optimizer_params['gamma']
+        beta = optimizer_params['beta1']
+        gamma = optimizer_params['beta2']
         eps = optimizer_params['eps']       
 
         ## TODO 6: Return updated weights and biases for the hidden layer based on the update rules for Adam Optimizer
-
-        return [],[]
-        # return updated_W, updated_B
+        updated_W,updated_B = [],[]
+        n=len(self.weights)
+        if self.t==0:
+            self.velocity_w = [np.zeros_like(w) for w in weights]
+            self.velocity_b = [np.zeros_like(b) for b in biases]
+            self.second_moment_w = [np.zeros_like(w) for w in weights]
+            self.second_moment_b = [np.zeros_like(b) for b in biases]
+        self.t+=1
+        for i in range(n):
+            vt_w= beta*self.velocity_w[i]+(1-beta)*delta_weights[n-1-i]
+            vt_b= beta*self.velocity_b[i]+(1-beta)*delta_biases[n-1-i]
+            st_w= gamma*self.second_moment_w[i]+((1-gamma)*(delta_weights[n-1-i]**2))
+            st_b= gamma*self.second_moment_b[i]+((1-gamma)*(delta_biases[n-1-i]**2))
+            scap_w=st_w/(1-gamma**self.t)
+            scap_b=st_b/(1-gamma**self.t)
+            vcap_w=vt_w/(1-beta**self.t)
+            vcap_b=vt_b/(1-beta**self.t)
+            offset_w=learning_rate/(np.sqrt(scap_w)+eps)
+            offset_b=learning_rate/(np.sqrt(scap_b)+eps)
+            updated_W.append(weights[i]-offset_w*vcap_w)
+            updated_B.append(biases[i]-offset_b*vcap_b)
+            self.velocity_w[i]=vt_w
+            self.velocity_b[i]=vt_b
+            self.second_moment_w[i]=st_w
+            self.second_moment_b[i]=st_b
+        return updated_W, updated_B
 
     def train(self, X_train, y_train, X_eval, y_eval, num_epochs, batch_size, optimizer, optimizer_params):
         train_losses = []
@@ -294,19 +339,19 @@ if __name__ == "__main__":
     optimizer = "bgd"
     optimizer_params = {
         'learning_rate': 0.1,
-        'gd_flag': 1,
+        'gd_flag': 3,
         'momentum': 0.99,
         'decay_constant': 0.2
     }
     
     # For Adam optimizer you can use the following
-    # optimizer = "adam"
-    # optimizer_params = {
-    #     'learning_rate': 0.01,
-    #     'beta1' : 0.9,
-    #     'beta2' : 0.999,
-    #     'eps' : 1e-8
-    # }
+    optimizer = "adam"
+    optimizer_params = {
+        'learning_rate': 0.01,
+        'beta1' : 0.9,
+        'beta2' : 0.999,
+        'eps' : 1e-8
+    }
 
      
     model = NN(input_dim, hidden_dims)
